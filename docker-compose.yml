@@ -1,0 +1,13 @@
+services:
+  server:
+    build:
+      context: .
+    ports:
+      - 8080:8080
+
+  client:
+    image: thelounge/thelounge
+    ports:
+      - 9000:9000
+    volumes:
+      - ./thelounge:/var/opt/thelounge

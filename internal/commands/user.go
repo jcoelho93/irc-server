@@ -1,6 +1,9 @@
 package commands
 
-import "fmt"
+import (
+	"fmt"
+	"log/slog"
+)
 
 type UserCommand struct {
 	Username   string
@@ -28,7 +31,7 @@ func (c UserCommand) Validate() error {
 func (c UserCommand) Execute(ctx *Ctx) error {
 	ctx.Server.SetUser(ctx.Connection, c.Username, c.Hostname, c.Realname)
 
-	user := ctx.Server.GetClient(ctx.Connection)
+	user, _ := ctx.Server.GetClient(ctx.Connection)
 
 	if user.GetNickname() != "" && user.GetUsername() != "" {
 		// Send welcome message
@@ -41,6 +44,6 @@ func (c UserCommand) Execute(ctx *Ctx) error {
 		}
 	}
 
-	fmt.Printf("User set to %s (%s@%s)\n", c.Username, c.Hostname, c.Realname)
+	slog.Info("User set", "username", c.Username, "hostname", c.Hostname, "realname", c.Realname)
 	return nil
 }

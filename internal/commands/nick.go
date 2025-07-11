@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
 )
 
 type NickCommand struct {
@@ -28,9 +29,9 @@ func (c NickCommand) Execute(ctx *Ctx) error {
 		return fmt.Errorf("nickname %s is already in use", c.NewNick)
 	}
 	ctx.Server.SetNick(ctx.Connection, c.NewNick)
-	fmt.Printf("Nickname changed to %s\n", c.NewNick)
+	slog.Info("Nickname changed", "new_nick", c.NewNick)
 
-	user := ctx.Server.GetClient(ctx.Connection)
+	user, _ := ctx.Server.GetClient(ctx.Connection)
 
 	if user.GetNickname() != "" && user.GetUsername() != "" {
 		// Send welcome message

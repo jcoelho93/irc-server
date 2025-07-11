@@ -18,10 +18,7 @@ func (c CapCommand) Validate() error {
 }
 
 func (c CapCommand) Execute(ctx *Ctx) error {
-	fmt.Println("Received CAP command")
-
 	response := "CAP * ACK :multi-prefix"
-
 	_, err := ctx.Connection.Write([]byte(response + "\r\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send CAP response: %w", err)

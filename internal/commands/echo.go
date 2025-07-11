@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
 )
 
 type EchoCommand struct {
@@ -25,7 +26,7 @@ func (c EchoCommand) Execute(ctx *Ctx) error {
 	if c.Message == "" {
 		return fmt.Errorf("message cannot be empty")
 	}
-	fmt.Printf("Echoing message: %s\n", c.Message)
+	slog.Info("Echoing message", "message", c.Message)
 	_, err := ctx.Connection.Write([]byte(c.Message + "\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)

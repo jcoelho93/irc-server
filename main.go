@@ -1,19 +1,17 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/jcoelho93/irc/internal/server"
 )
 
 func main() {
 	port := ":8080"
-	fmt.Println("Starting server on port", port)
 	server := server.NewInternetRelayChatServer(port)
 	err := server.Start()
 	if err != nil {
-		log.Fatal("Error starting server:", err)
+		slog.Error("Failed to start IRC server", "error", err)
 	}
-	fmt.Println("Server stopped")
+	slog.Info("IRC server stopped")
 }

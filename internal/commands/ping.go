@@ -1,6 +1,9 @@
 package commands
 
-import "fmt"
+import (
+	"fmt"
+	"log/slog"
+)
 
 type PingCommand struct{}
 
@@ -18,13 +21,13 @@ func (c PingCommand) Validate() error {
 }
 
 func (c PingCommand) Execute(ctx *Ctx) error {
-	fmt.Println("Received PING command")
+	slog.Info("Received PING command", "connection", ctx.Connection.RemoteAddr().String())
 
 	response := "PONG"
 	_, err := ctx.Connection.Write([]byte(response + "\r\n"))
 	if err != nil {
 		return fmt.Errorf("failed to send PONG response: %w", err)
 	}
-	fmt.Println("Sent PONG response")
+	slog.Info("Sent PONG response", "connection", ctx.Connection.RemoteAddr().String())
 	return nil
 }

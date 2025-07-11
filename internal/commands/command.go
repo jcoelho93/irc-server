@@ -2,6 +2,8 @@ package commands
 
 import (
 	"net"
+
+	"github.com/jcoelho93/irc/internal/types"
 )
 
 type Command interface {
@@ -11,11 +13,6 @@ type Command interface {
 	Execute(ctx *Ctx) error
 }
 
-type User interface {
-	GetNickname() string
-	GetUsername() string
-}
-
 type Server interface {
 	Start() error
 	IsUsernameTaken(nick string) bool
@@ -23,7 +20,8 @@ type Server interface {
 	SetNick(conn net.Conn, nick string)
 	SetUser(conn net.Conn, username, hostname, realname string) error
 	SetPassword(conn net.Conn, password string) error
-	GetClient(conn net.Conn) User
+	GetClient(conn net.Conn) (types.User, bool)
+	GetClients() map[net.Conn]types.User
 	GetHostname() string
 }
 

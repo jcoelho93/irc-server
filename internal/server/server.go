@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"strings"
@@ -47,55 +49,95 @@ func (irc *InternetRelayChatServer) Start() error {
 
 func (irc *InternetRelayChatServer) handleConnection(c net.Conn) {
 	slog.Info("New connection established", "remote_addr", c.RemoteAddr().String())
-	defer c.Close()
+	defer func() {
+		defer c.Close()
+		slog.Info("Connection closed", "remote_addr", c.RemoteAddr().String())
+	}()
 
 	for {
-		command, err := irc.readCommand(c)
+		commandList, err := irc.readCommand(c)
 		if err != nil {
-			panic(err)
+			if errors.Is(err, io.EOF) {
+				slog.Info("Connection closed by client", "remote_addr", c.RemoteAddr().String())
+				return
+			}
+			slog.Error("Failed to read command", "error", err, "remote_addr", c.RemoteAddr().String())
+			return
 		}
+		for _, cmd := range commandList {
+			if err := cmd.Validate(); err != nil {
+				slog.Error("Command validation failed", "error", err, "remote_addr", c.RemoteAddr().String())
+				continue
+			}
 
-		err = command.Validate()
-		if err != nil {
-			slog.Error("Invalid command", "error", err)
-			panic(err)
-		}
-		slog.Info("command received", "command", command.Name(), "remote_addr", c.RemoteAddr().String())
+			slog.Info("Executing command", "command", cmd.Name(), "remote_addr", c.RemoteAddr().String())
 
-		err = command.Execute(&commands.Ctx{Server: irc, Connection: c})
-		if err != nil {
-			panic(err)
+			if err := cmd.Execute(&commands.Ctx{
+				Server:     irc,
+				Connection: c,
+			}); err != nil {
+				slog.Error("Failed to execute command", "error", err, "command", cmd.Name(), "remote_addr", c.RemoteAddr().String())
+				continue
+			}
 		}
 	}
+
 }
 
-func (irc *InternetRelayChatServer) readCommand(c net.Conn) (commands.Command, error) {
+func (irc *InternetRelayChatServer) readCommand(c net.Conn) ([]commands.Command, error) {
 	buf := make([]byte, 1024)
 	n, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
 
-	rawCommand := string(buf[:n])
-	rawCommand = strings.TrimSpace(rawCommand)
-	arguments := strings.Split(rawCommand, " ")
-	command := arguments[0]
-	slog.Info("Command received: ", "remote_addr", c.RemoteAddr().String(), "command", command)
-	slog.Info("", "command", command, "arguments", strings.Join(arguments, " "))
+	rawInput := string(buf[:n])
+	lines := strings.Split(rawInput, "\r\n")
+
+	var parsedCommands []commands.Command
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		arguments := strings.Split(line, " ")
+		command := arguments[0]
+
+		slog.Info("Command received", "remote_addr", c.RemoteAddr().String(), "command", command)
+		slog.Info("", "command", command, "arguments", strings.Join(arguments, " "))
+
+		cmd, err := irc.parseCommand(command, arguments)
+		if err != nil {
+			slog.Warn("Failed to parse command", "error", err, "remote_addr", c.RemoteAddr().String())
+			continue
+		}
+		parsedCommands = append(parsedCommands, cmd)
+	}
+
+	return parsedCommands, nil
+}
+
+func (irc *InternetRelayChatServer) parseCommand(command string, arguments []string) (commands.Command, error) {
+	command = strings.ToUpper(command)
+
 	switch command {
 	case "PASS":
-		return commands.PassCommand{
-			Password: arguments[1],
-		}, nil
+		if len(arguments) < 2 {
+			return nil, fmt.Errorf("PASS requires a password")
+		}
+		return commands.PassCommand{Password: arguments[1]}, nil
 	case "NICK":
-		return commands.NickCommand{
-			NewNick: arguments[1],
-		}, nil
+		if len(arguments) < 2 {
+			return nil, fmt.Errorf("NICK requires a nickname")
+		}
+		return commands.NickCommand{NewNick: arguments[1]}, nil
 	case "ECHO":
-		return commands.EchoCommand{
-			Message: strings.Join(arguments[1:], " "),
-		}, nil
+		return commands.EchoCommand{Message: strings.Join(arguments[1:], " ")}, nil
 	case "USER":
+		if len(arguments) < 5 {
+			return nil, fmt.Errorf("USER requires at least 5 arguments")
+		}
 		return commands.UserCommand{
 			Username:   arguments[1],
 			Hostname:   arguments[2],
@@ -107,12 +149,13 @@ func (irc *InternetRelayChatServer) readCommand(c net.Conn) (commands.Command, e
 	case "CAP":
 		return commands.CapCommand{}, nil
 	case "JOIN":
-		return commands.JoinCommand{
-			Channels: arguments[1:],
-		}, nil
+		return commands.JoinCommand{Channels: arguments[1:]}, nil
 	case "QUIT":
 		return commands.QuitCommand{}, nil
 	case "PRIVMSG":
+		if len(arguments) < 3 {
+			return nil, fmt.Errorf("PRIVMSG requires a target and a message")
+		}
 		return commands.PrivMsgCommand{
 			Target:  arguments[1],
 			Message: strings.Join(arguments[2:], " "),
